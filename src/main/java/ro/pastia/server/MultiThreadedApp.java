@@ -12,7 +12,7 @@ import java.util.Properties;
 public class MultiThreadedApp {
 
     private static final Logger logger = LoggerFactory.getLogger(MultiThreadedApp.class);
-    public static Properties serverConfig = new Properties();
+    public static final Properties serverConfig = new Properties();
 
     public static void main(String[] args) {
         logger.debug("Preparing to start server...");
@@ -25,8 +25,12 @@ public class MultiThreadedApp {
         }
 
         int port = Integer.parseInt(serverConfig.getProperty("server.port"));
+        int maxThreads = Integer.parseInt(
+            serverConfig.getProperty("server.multithread.maxThreads"));
+        String basePath = serverConfig.get("server.basePath").toString();
 
-        final MultiThreadedServer server = new MultiThreadedServer(port);
+        final MultiThreadedServer server =
+            new MultiThreadedServer(port, maxThreads, basePath, serverConfig);
         new Thread(server).start();
 
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {

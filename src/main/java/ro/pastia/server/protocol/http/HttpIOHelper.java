@@ -14,9 +14,11 @@ public class HttpIOHelper {
         HttpRequest request = new HttpRequest();
 
         String line = reader.readLine();
+      System.out.println("LINE:" + line);
         //parse first line of request, Request-Line
         request.parseRequestLine(line);
 
+        //parse header lines
         while (!line.equals("")) {
             line = reader.readLine();
             request.parseHeaderLine(line);

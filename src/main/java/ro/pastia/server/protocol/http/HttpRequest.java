@@ -19,22 +19,27 @@ public class HttpRequest {
         PUT("PUT"),
         DELETE("DELETE"),
         TRACE("TRACE"),
-        CONNECT("CONNECT"),
-        UNRECOGNIZED(null);
+        CONNECT("CONNECT");
 
-        private final String value;
-
-        private Method(String value) {
-            this.value = value;
+        private final String method;
+        private Method(String method) {
+            this.method = method;
         }
     }
 
+    private static final String CRLF = "\r\n";
+
+    private String httpVersion;
     private Method method;
     private String uri;
-    private String httpVersion;
+
     private Map<String, String> headers = new HashMap<>();
 
     protected void parseRequestLine(String line) throws InvalidRequestException {
+        if(line == null) {
+          throw new InvalidRequestException("Request Line was NULL");
+        }
+
         String[] splits = line.split("\\s");
 
         if(splits.length!=3) {
@@ -107,7 +112,7 @@ public class HttpRequest {
             sb.append(header.getKey());
             sb.append(": ");
             sb.append(header.getValue());
-            sb.append("\n");
+            sb.append(CRLF);
         }
         return sb.toString();
     }
