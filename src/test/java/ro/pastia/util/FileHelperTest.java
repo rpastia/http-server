@@ -3,11 +3,7 @@ package ro.pastia.util;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 
-/**
- * Created by Radu on 15.07.2014.
- */
 public class FileHelperTest {
-
 
     @Test
     public void testFileHelper(){

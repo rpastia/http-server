@@ -2,6 +2,9 @@ package ro.pastia.server.protocol.http;
 
 import ro.pastia.server.protocol.http.exception.InvalidRequestException;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+
 /**
  * A HTTP request.
  * <p>
@@ -36,7 +39,11 @@ public class HttpRequest extends HttpMessage {
             throw new InvalidRequestException("Bad Method: " + splits[0]);
         }
 
-        setUri(splits[1]);
+        try {
+            setUri(URLDecoder.decode(splits[1], "UTF-8"));
+        } catch (UnsupportedEncodingException e) {
+            throw new InvalidRequestException("Bad URI:" + splits[1]);
+        }
         setHttpVersion(splits[2]);
     }
 

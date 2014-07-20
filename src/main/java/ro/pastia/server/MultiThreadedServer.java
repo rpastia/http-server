@@ -49,7 +49,7 @@ public class MultiThreadedServer implements Runnable {
      * @param serverConfig contains other configuration parameters
      */
     public MultiThreadedServer(int port, int maxThreads, String basePath, Properties serverConfig) {
-        this.threadPool = new ThreadPoolExecutor(
+        threadPool = new ThreadPoolExecutor(
                 maxThreads, maxThreads, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(maxThreads*4));
         this.serverPort = port;
         this.basePath = basePath;
@@ -58,11 +58,12 @@ public class MultiThreadedServer implements Runnable {
 
     public void run() {
         openServerSocket();
+        logger.info("Server started on port {}", serverPort);
 
         while (!isStopped()) {
             Socket clientSocket;
             try {
-                clientSocket = this.serverSocket.accept();
+                clientSocket = serverSocket.accept();
             } catch (IOException e) {
                 if (isStopped()) {
                     logger.info("Server Stopped.");
@@ -71,11 +72,11 @@ public class MultiThreadedServer implements Runnable {
                     throw new RuntimeException("Error accepting client connection", e);
                 }
             }
-            this.threadPool.execute(
+            threadPool.execute(
                     new RequestHandler(clientSocket, MimeTypeResolver.getInstance(), basePath, serverConfig));
         }
 
-        this.threadPool.shutdown();
+        threadPool.shutdown();
         logger.info("Server Stopped.");
     }
 
@@ -85,9 +86,9 @@ public class MultiThreadedServer implements Runnable {
 
     public synchronized void stop() {
         logger.info("Stopping server...");
-        this.isStopped = true;
+        isStopped = true;
         try {
-            this.serverSocket.close();
+            serverSocket.close();
         } catch (IOException e) {
             throw new RuntimeException("Error closing server", e);
         }
@@ -95,9 +96,9 @@ public class MultiThreadedServer implements Runnable {
 
     private void openServerSocket() {
         try {
-            this.serverSocket = new ServerSocket(this.serverPort);
+            serverSocket = new ServerSocket(serverPort);
         } catch (IOException e) {
-            throw new RuntimeException("Cannot open port 8080", e);
+            throw new RuntimeException("Cannot open port " + serverPort, e);
         }
     }
 }

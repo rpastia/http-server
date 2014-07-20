@@ -67,7 +67,7 @@ public class MultiThreadedApp {
             try (FileInputStream propFile = new FileInputStream(propPath)) {
                 serverConfig.load(propFile);
             } catch (IOException e) {
-                logger.warn("Can't load from specified properties file!");
+                logger.warn("Can't load from specified properties file! Falling to defaults...");
             }
         }
     }
