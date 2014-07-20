@@ -20,9 +20,9 @@ public class DateTimeHelper {
     }
 
     /**
-     * Returns the current server timp in the format required by the HTTP protocol
+     * Returns the current server time in the format required by the HTTP protocol
      *
-     * @return
+     * @return the current server time in the format required by the HTTP protocol
      */
     public static synchronized String getHttpServerTime() {
         return httpServerDateFormat.format(calendar.getTime());
