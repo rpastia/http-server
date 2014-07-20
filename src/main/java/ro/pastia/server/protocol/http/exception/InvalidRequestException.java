@@ -1,7 +1,7 @@
 package ro.pastia.server.protocol.http.exception;
 
 /**
- * Created by Radu on 16.07.2014.
+ * Exception thrown by members of HttpRequest when different parts of the request can't be parsed.
  */
 public class InvalidRequestException extends Exception {
 

@@ -1,18 +1,23 @@
 package ro.pastia.server;
 
+import org.apache.log4j.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
+/**
+ * Bootstraps a <code>MultiThreadedServer</code> instance
+ */
 public class MultiThreadedApp {
 
-    private static final Logger logger = LoggerFactory.getLogger(MultiThreadedApp.class);
+    public static final String PROPERTY_DEBUG = "app.debug";
+
     public static final Properties serverConfig = new Properties();
+    private static final Logger logger = LoggerFactory.getLogger(MultiThreadedApp.class);
 
     public static void main(String[] args) {
         logger.debug("Preparing to start server...");
@@ -24,25 +29,26 @@ public class MultiThreadedApp {
             loadProperties(null);
         }
 
-        int port = Integer.parseInt(serverConfig.getProperty("server.port"));
-        int maxThreads = Integer.parseInt(
-            serverConfig.getProperty("server.multithread.maxThreads"));
-        String basePath = serverConfig.get("server.basePath").toString();
+        int port = Integer.parseInt(serverConfig.getProperty(MultiThreadedServer.PROPERTY_PORT));
+        int maxThreads = Integer.parseInt(serverConfig.getProperty(MultiThreadedServer.PROPERTY_MULTITHREAD_MAXTHREADS));
+        String basePath = serverConfig.get(MultiThreadedServer.PROPERTY_BASEPATH).toString();
 
-        final MultiThreadedServer server =
-            new MultiThreadedServer(port, maxThreads, basePath, serverConfig);
+        boolean debug = Boolean.parseBoolean(serverConfig.get(PROPERTY_DEBUG).toString());
+        if (debug) {
+            org.apache.log4j.Logger root = org.apache.log4j.Logger.getRootLogger();
+            root.setLevel(Level.DEBUG);
+            logger.debug("Running in debug mode!");
+        }
+
+        final MultiThreadedServer server = new MultiThreadedServer(port, maxThreads, basePath, serverConfig);
         new Thread(server).start();
 
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
             public void run() {
-                logger.info("Stopping server!");
+                logger.info("Shutdown command received!");
                 server.stop();
             }
         }));
-
-
-        MimeTypeResolver.getInstance();
-
     }
 
     private static void loadProperties(String propPath) {

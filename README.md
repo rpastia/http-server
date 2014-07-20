@@ -1,0 +1,1 @@
+Supports GZIP Compression for responses

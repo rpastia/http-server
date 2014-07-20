@@ -12,19 +12,25 @@ import java.net.FileNameMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+
+/**
+ * Resolves MIME type for a wide array of file extensions by using the static <code>mime.types.txt</code> file resource.
+ * The file was retrived from https://svn.apache.org/repos/asf/httpd/httpd/trunk/docs/conf/mime.types
+ */
 public class MimeTypeResolver implements FileNameMap {
 
-    private Map<String, String> extToMimeMap;
-
-    private static MimeTypeResolver instance;
     private static final String DEFAULT = "application/octet-stream";
     private static final Logger logger = LoggerFactory.getLogger(MimeTypeResolver.class);
+
     static {
         instance = new MimeTypeResolver();
     }
 
+    private static MimeTypeResolver instance;
+    private Map<String, String> extToMimeMap;
+
     private MimeTypeResolver() {
-        extToMimeMap = new ConcurrentHashMap<String, String>();
+        extToMimeMap = new ConcurrentHashMap<>();
         initializeMimeTypes();
     }
 
@@ -32,27 +38,26 @@ public class MimeTypeResolver implements FileNameMap {
         return instance;
     }
 
-    protected void initializeMimeTypes() {
-        logger.debug("Initializing mime types...");
+    private void initializeMimeTypes() {
         try (
-            InputStream mimeFileStream = Thread.currentThread().getContextClassLoader()
-                .getResourceAsStream("mime.types.txt");
-            BufferedReader mimeFileReader = new BufferedReader(new InputStreamReader(mimeFileStream))
+                InputStream mimeFileStream = Thread.currentThread().getContextClassLoader()
+                        .getResourceAsStream("mime.types.txt");
+                BufferedReader mimeFileReader = new BufferedReader(new InputStreamReader(mimeFileStream))
         ) {
             String line;
-            while ((line = mimeFileReader.readLine()) != null){
+            while ((line = mimeFileReader.readLine()) != null) {
                 loadMimeLine(line);
             }
         } catch (IOException e) {
             throw new RuntimeException("Can't load mime types mappings!", e);
         }
-        logger.debug("Finished initializing mime types! {} mappings loaded", extToMimeMap.size());
+        logger.info("Initialized mime types! {} mappings loaded", extToMimeMap.size());
     }
 
 
-    protected void loadMimeLine(String line) {
+    private void loadMimeLine(String line) {
         line = line.trim();
-        if (line.startsWith("#")){
+        if (line.charAt(0) == '#') {
             return;
         }
         String[] pieces = line.split("\\s+");
@@ -61,21 +66,19 @@ public class MimeTypeResolver implements FileNameMap {
             return;
         }
         String mimeType = pieces[0];
-        for (int i=1; i<pieces.length; i++) {
+        for (int i = 1; i < pieces.length; i++) {
             extToMimeMap.put(pieces[i], mimeType);
         }
     }
 
     /**
-     * Guess the MIME type from a file name
-     * (possibly including a path)
+     * Return the MIME type from a file name (possibly including a path)
      *
-     * @param  name  The name (e.g., "/pictures/dome.gif")
-     * @return       The MIME type (e.g., "image/gif")
+     * @param name The name (e.g. "/pictures/dome.gif")
+     * @return The MIME type (e.g. "image/gif")
      */
     @Override
-    public String getContentTypeFor(String name)
-    {
+    public String getContentTypeFor(String name) {
         return getContentTypeForExtension(FileHelper.getExtension(name));
 
     }
@@ -83,19 +86,15 @@ public class MimeTypeResolver implements FileNameMap {
     /**
      * Return the MIME type for a specific file extension
      *
-     * @param  ext  The extension (e.g., "gif")
-     * @return      The MIME type (e.g., "image/gif")
+     * @param ext The extension (e.g. "gif")
+     * @return The MIME type (e.g. "image/gif")
      */
-    public String getContentTypeForExtension(String ext)
-    {
-        String    type;
+    public String getContentTypeForExtension(String ext) {
+        String type;
         type = extToMimeMap.get(ext.toLowerCase());
 
         return (type == null) ? DEFAULT : type;
     }
-
-
-
 
 
 }

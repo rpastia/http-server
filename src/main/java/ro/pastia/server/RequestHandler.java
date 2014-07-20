@@ -6,6 +6,7 @@ import ro.pastia.server.protocol.http.HttpIOHelper;
 import ro.pastia.server.protocol.http.HttpRequest;
 import ro.pastia.server.protocol.http.HttpResponse;
 import ro.pastia.server.protocol.http.exception.InvalidRequestException;
+import ro.pastia.util.DateTimeHelper;
 
 import java.io.*;
 import java.net.FileNameMap;
@@ -14,42 +15,48 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.Properties;
 
-import static ro.pastia.server.protocol.http.HttpResponse.Status.*;
+import static ro.pastia.server.protocol.http.HttpResponse.Status.STATUS_301;
+import static ro.pastia.server.protocol.http.HttpResponse.Status.STATUS_404;
 
-
+/**
+ * Handles a HTTP request
+ */
 public class RequestHandler implements Runnable {
 
-    Socket clientSocket;
-    FileNameMap mimeTypeResolver;
-    String basePath;
-    Properties serverConfig;
-
-    char pathSeparator = '/';
-
     private static final Logger logger = LoggerFactory.getLogger(RequestHandler.class);
+    private static final int STREAMING_BUFFER_SIZE = 1024 * 128;
+    private Socket clientSocket;
+    private FileNameMap mimeTypeResolver;
+    private String basePath;
+    private Properties serverConfig;
 
-  public RequestHandler(Socket clientSocket, FileNameMap mimeTypeResolver, String basePath,
-                        Properties serverConfig) {
-    this.clientSocket = clientSocket;
-    this.mimeTypeResolver = mimeTypeResolver;
-    this.basePath = basePath;
-    this.serverConfig = serverConfig;
-  }
+    /**
+     * Constructs a RequestHandler
+     *
+     * @param clientSocket     the socket to perfrom IO on
+     * @param mimeTypeResolver an instance of a FileNameMap to resolve MIME types
+     * @param basePath         base path to server documents out of
+     * @param serverConfig     contains all other server settings
+     */
+    public RequestHandler(Socket clientSocket, FileNameMap mimeTypeResolver, String basePath,
+                          Properties serverConfig) {
+        this.clientSocket = clientSocket;
+        this.mimeTypeResolver = mimeTypeResolver;
+        this.basePath = basePath;
+        this.serverConfig = serverConfig;
+    }
 
     public void run() {
         try (
-            InputStream input  = clientSocket.getInputStream();
-            OutputStream output = clientSocket.getOutputStream()
+                InputStream input = clientSocket.getInputStream();
+                OutputStream output = clientSocket.getOutputStream()
         ) {
-            HttpRequest request = HttpIOHelper.parseHttpRequest(input);
-            System.out.print(request.toString());
-            streamResponseForRequest(request, output);
+            HttpRequest httpRequest = HttpIOHelper.parseHttpRequest(input);
+            logger.debug("Processing request for: {}", httpRequest.getUri());
 
+            ServerResponse serverResponse = getServerResponse(httpRequest);
 
-
-            //########### GARBAGE: ###########
-            long time = System.currentTimeMillis();
-            System.out.println("Request processed: " + time + " " + Thread.currentThread().getId());
+            streamResponse(serverResponse, output);
         } catch (IOException e) {
             logger.error("Error while processing request: {}", e.toString());
         } catch (InvalidRequestException e) {
@@ -58,100 +65,168 @@ public class RequestHandler implements Runnable {
         }
     }
 
-  private void streamResponseForRequest(HttpRequest request, OutputStream output)
-      throws IOException {
-    switch (request.getMethod()) {
-      case GET:
-        File file = new File(basePath + request.getUri());
-        if(!file.exists()) {
-          handleFileNotFound(request, output);
+    /**
+     * Processes a HttpRequest and constructs the appropriate ServerResponse object
+     *
+     * @param request the request to be processed
+     * @return the server response
+     * @throws IOException
+     */
+    private ServerResponse getServerResponse(HttpRequest request)
+            throws IOException {
+        HttpResponse response = getNewHttpResponse();
+        ServerResponse serverResponse = new ServerResponse();
+
+        switch (request.getMethod()) {
+            case GET:
+                File file = new File(basePath + request.getUri());
+                if (!file.exists()) {
+                    handleFileNotFound(request, response);
+                }
+                if (file.isDirectory()) {
+                    handleGetDirectory(request, response, file);
+                }
+                if (file.isFile()) {
+                    handleGetFile(response, file);
+                    serverResponse.setContentStream(new BufferedInputStream(new FileInputStream(file)));
+                }
+                break;
+            default:
         }
-        if (file.isDirectory()) {
-          handleGetDirectory(request, output, file);
+
+        if (!serverResponse.hasContentStream() && request.acceptsGzip()) {
+            response.putHeader("Content-Encoding", "gzip");
         }
 
-        break;
-      default:
+        serverResponse.setHttpResponse(response);
+        return serverResponse;
     }
 
+    /**
+     * Handles a file not found situation
+     *
+     * @param request  the request that triggered the situation
+     * @param response the HttpResponse that will be manipulated
+     */
+    private void handleFileNotFound(HttpRequest request, HttpResponse response) {
+        response.setStatus(STATUS_404);
 
-  }
+        response.putHeader("Connection", "close");
 
-  private void handleGetDirectory(HttpRequest request, OutputStream output, File file)
-      throws IOException {
-    HttpResponse response = getNewHttpResponse();
+        SimpleHTMLDocument html = new SimpleHTMLDocument();
+        html.setTitle(STATUS_404.toString());
+        html.append("<h1>Not Found</h1>");
+        html.append("<p>The requested URL ").append(request.getUri()).append(" was not found on this server.</p>");
+        html.append("<hr>");
+        html.append(getServerSignature());
 
-    if(!request.getUri().endsWith("/")) {
-      response.setStatus(STATUS_301);
-      response.putHeader("Location", request.getUri() + '/');
-    } else {
-      response.setBody( getHtmlDirectoryListing(request.getUri(), file) );
+        response.setBody(html.toString());
     }
 
-    //System.out.print(response.toString());
-    output.write(response.toString().getBytes());
-  }
-
-  private void handleFileNotFound(HttpRequest request, OutputStream output) throws IOException {
-    HttpResponse response = getNewHttpResponse();
-    response.setStatus(STATUS_404);
-
-    response.putHeader("Connection", "close"); //TODO:Chceck
-    //response.putHeader("Content-Encoding", "gzip"); //TODO:Check
-    //response.putHeader("Vary", "Accept-Encoding"); //TODO:Check
-
-
-    SimpleHTMLDocument html = new SimpleHTMLDocument();
-    html.setTitle(STATUS_404.toString());
-    html.append("<h1>Not Found</h1>");
-    //TODO: URI vs URL
-    html.append("<p>The requested URL " + request.getUri() + " was not found on this server.</p>");
-    html.append("<hr>");
-    html.append(getSignature());
-
-    response.setBody(html.toString());
-    System.out.print(response.toString());
-    output.write(response.toString().getBytes());
-  }
-
-  private String getHtmlDirectoryListing(String uri, File file)
-      throws IOException {
-    File[] files = file.listFiles();
-    if(files==null) {
-      throw new IOException("Can't list files!");
+    /**
+     * Handles a directory listing.
+     *
+     * @param request  the request that triggered the directory listing
+     * @param response the HttpResponse that will be manipulated
+     * @param file     the file object that was obtained from the request Uri
+     * @throws IOException
+     */
+    private void handleGetDirectory(HttpRequest request, HttpResponse response, File file)
+            throws IOException {
+        if (!request.getUri().endsWith("/")) {
+            response.setStatus(STATUS_301);
+            response.putHeader("Location", request.getUri() + '/');
+        } else {
+            response.setBody(getHtmlDirectoryListing(request.getUri(), file));
+        }
     }
 
-    SimpleHTMLDocument html = new SimpleHTMLDocument();
-    html.setTitle("Index of " + uri);
-    html.append("<h1>Index of " + uri + "</h1>");
-
-    String childName;
-    for (File child : files) {
-      childName = child.isDirectory() ? child.getName()+"/" : child.getName();
-      html.append("<a href=\"" + childName + "\">" + childName + "</a><br />\n");
+    /**
+     * Handles a file request.
+     *
+     * @param response the HttpResponse that will be manipulated
+     * @param file     the file object that was obtained from the request Uri
+     * @throws IOException
+     */
+    private void handleGetFile(HttpResponse response, File file)
+            throws IOException {
+        response.putHeader("Last-Modified", DateTimeHelper.getHttpTime(file.lastModified()));
+        response.putHeader("Accept-Ranges", "none");
+        response.putHeader("Content-Length", String.valueOf(file.length()));
+        response.putHeader("Content-Type", mimeTypeResolver.getContentTypeFor(file.getName()));
     }
 
-    return html.toString();
-  }
+    /**
+     * Streams a ServerResponse object. Handles both the HttpResponse part and the content stream if it exists
+     *
+     * @param serverResponse the object that needs to be sent to the output stream
+     * @param output         the provided output stream
+     * @throws IOException
+     * @throws NullPointerException if either parameter is null.
+     */
+    private void streamResponse(ServerResponse serverResponse, OutputStream output) throws IOException {
+        HttpResponse httpResponse = serverResponse.getHttpResponse();
+        HttpIOHelper.streamHttpResponse(httpResponse, output);
 
-  private String getSignature() {
-    String hostName;
-    try {
-      hostName = InetAddress.getLocalHost().getCanonicalHostName();
-    } catch (UnknownHostException e) {
-      hostName = "-";
+        if (serverResponse.hasContentStream()) {
+            try (InputStream in = serverResponse.getContentStream()) {
+                byte[] buffer = new byte[STREAMING_BUFFER_SIZE];
+                int bytesRead;
+                while ((bytesRead = in.read(buffer)) != -1) {
+                    output.write(buffer, 0, bytesRead);
+                }
+            }
+        }
     }
-    return "<address>" +
-        serverConfig.getProperty(MultiThreadedServer.PROPERTY_SERVER_NAME) +
-        " Server at " + hostName + " Port " +
-        serverConfig.getProperty(MultiThreadedServer.PROPERTY_SERVER_PORT) +
-        "</address>";
-  }
 
-  private HttpResponse getNewHttpResponse(){
-    HttpResponse response = new HttpResponse();
-    response.setServerName(serverConfig.getProperty(MultiThreadedServer.PROPERTY_SERVER_NAME));
-    return response;
-  }
+    /**
+     * Gets the HTML code for a directory listing.
+     *
+     * @param uri  URI of the location
+     * @param file the file object that was obtained from the request Uri
+     * @return HTML code for the directory listing
+     * @throws IOException
+     * @throws NullPointerException if either parameter is null.
+     */
+    private String getHtmlDirectoryListing(String uri, File file) throws IOException {
+        File[] files = file.listFiles();
+        if (files == null) {
+            throw new IOException("Can't list files!");
+        }
+
+        SimpleHTMLDocument html = new SimpleHTMLDocument();
+        html.setTitle("Index of " + uri);
+        html.append("<h1>Index of ").append(uri).append("</h1>");
+
+        String childName;
+        for (File child : files) {
+            if (child.isHidden() || (child.getName().charAt(0) == '.')) {
+                continue;
+            }
+            childName = child.isDirectory() ? child.getName() + "/" : child.getName();
+            html.append("<a href=\"").append(childName).append("\">").append(childName).append("</a><br />\n");
+        }
+
+        return html.toString();
+    }
+
+    private String getServerSignature() {
+        String hostName;
+        try {
+            hostName = InetAddress.getLocalHost().getCanonicalHostName();
+        } catch (UnknownHostException e) {
+            hostName = "-";
+        }
+        return "<address>" +
+                MultiThreadedServer.NAME + " Server at " + hostName + " Port " +
+                serverConfig.getProperty(MultiThreadedServer.PROPERTY_PORT) +
+                "</address>";
+    }
+
+    private HttpResponse getNewHttpResponse() {
+        HttpResponse response = new HttpResponse();
+        response.putHeader("Server", MultiThreadedServer.NAME);
+        return response;
+    }
 
 }

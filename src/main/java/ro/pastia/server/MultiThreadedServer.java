@@ -7,57 +7,76 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Properties;
-import java.util.concurrent.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
+/**
+ * A Simple Multi-Threaded HTTP Server
+ * <p>
+ * Implements a simple Multi-Threaded HTTP Server with a very limited set of functionality.
+ * Supports basic directory listings and streaming files.
+ * </p>
+ */
 public class MultiThreadedServer implements Runnable {
 
+    /**
+     * Name of the server as it will be used in headers and server signature.
+     */
+    public static final String NAME = "Simple Server/1.0";
+
+    public static final String PROPERTY_PORT = "server.port";
+    public static final String PROPERTY_BASEPATH = "server.basePath";
+    public static final String PROPERTY_MULTITHREAD_MAXTHREADS = "server.multithread.maxThreads";
+
+    private static final Logger logger = LoggerFactory.getLogger(MultiThreadedServer.class);
     private int serverPort;
     private ServerSocket serverSocket;
     private boolean isStopped = false;
-    private Thread runningThread;
     private ExecutorService threadPool;
     private String basePath;
-
     private Properties serverConfig;
 
-    private static final Logger logger = LoggerFactory.getLogger(MultiThreadedServer.class);
 
-    public static final String PROPERTY_SERVER_NAME = "server.name";
-    public static final String PROPERTY_SERVER_PORT = "server.port";
-    public static final String PROPERTY_SERVER_BASEPATH = "server.basePath";
-
-  public MultiThreadedServer(int port, int maxThreads, String basePath, Properties serverConfig) {
-      this.threadPool = new ThreadPoolExecutor(maxThreads, maxThreads, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(20));
-      this.serverPort = port;
-      this.basePath = basePath;
-      this.serverConfig = serverConfig;
+    /**
+     * Constructs a MultiThreadedServer
+     *
+     * @param port         the port that the server should listen on
+     * @param maxThreads   the number of threads the server should use to handle requests; the server also keep a queue
+     *                     of requests if all worker threads are busy with a size of <code>maxThreads * 4</code>
+     * @param basePath     the base path out of which documents will be server (root of the server)
+     * @param serverConfig contains other configuration parameters
+     */
+    public MultiThreadedServer(int port, int maxThreads, String basePath, Properties serverConfig) {
+        this.threadPool = new ThreadPoolExecutor(
+                maxThreads, maxThreads, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(maxThreads*4));
+        this.serverPort = port;
+        this.basePath = basePath;
+        this.serverConfig = serverConfig;
     }
 
     public void run() {
-        synchronized (this) {
-            this.runningThread = Thread.currentThread();
-        }
-
         openServerSocket();
 
-      while (!isStopped()) {
-        Socket clientSocket = null;
-        try {
-          clientSocket = this.serverSocket.accept();
-        } catch (IOException e) {
-          if (isStopped()) {
-            System.out.println("Server Stopped.");
-            return;
-          }
-          throw new RuntimeException("Error accepting client connection", e);
+        while (!isStopped()) {
+            Socket clientSocket;
+            try {
+                clientSocket = this.serverSocket.accept();
+            } catch (IOException e) {
+                if (isStopped()) {
+                    logger.info("Server Stopped.");
+                    return;
+                } else {
+                    throw new RuntimeException("Error accepting client connection", e);
+                }
+            }
+            this.threadPool.execute(
+                    new RequestHandler(clientSocket, MimeTypeResolver.getInstance(), basePath, serverConfig));
         }
-        this.threadPool.execute(
-            new RequestHandler(clientSocket, MimeTypeResolver.getInstance(),
-                basePath, serverConfig) );
-      }
 
         this.threadPool.shutdown();
-        System.out.println("Server Stopped.");
+        logger.info("Server Stopped.");
     }
 
     private synchronized boolean isStopped() {
@@ -65,6 +84,7 @@ public class MultiThreadedServer implements Runnable {
     }
 
     public synchronized void stop() {
+        logger.info("Stopping server...");
         this.isStopped = true;
         try {
             this.serverSocket.close();
