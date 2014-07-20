@@ -8,7 +8,7 @@ It's limited set of features include:
 * File-based MIME Type resolver, easily changeable to other type of resolver
 * GZIP Compression for responses
 * Very simple directory listing
-* Configuration via external properties file (with default fall-back)
+* Configuration via external properties file (with fall-back to defaults)
 * Streaming large files without loading them in-memory
 * Graceful shutdown
 
