@@ -15,8 +15,7 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.Properties;
 
-import static ro.pastia.server.protocol.http.HttpResponse.Status.STATUS_301;
-import static ro.pastia.server.protocol.http.HttpResponse.Status.STATUS_404;
+import static ro.pastia.server.protocol.http.HttpResponse.Status.*;
 
 /**
  * Handles a HTTP request
@@ -92,6 +91,8 @@ public class RequestHandler implements Runnable {
                 }
                 break;
             default:
+                //Respond with status 501 Not Implemented for other request methods
+                response.setStatus(STATUS_501);
         }
 
         if (!serverResponse.hasContentStream() && request.acceptsGzip()) {
