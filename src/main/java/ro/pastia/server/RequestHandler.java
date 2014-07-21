@@ -50,17 +50,23 @@ public class RequestHandler implements Runnable {
                 InputStream input = clientSocket.getInputStream();
                 OutputStream output = clientSocket.getOutputStream()
         ) {
-            HttpRequest httpRequest = HttpIOHelper.parseHttpRequest(input);
+            HttpRequest httpRequest;
+            try {
+                httpRequest = HttpIOHelper.parseHttpRequest(input);
+            } catch (InvalidRequestException e) {
+                //Generate a response with error code 400 Bad Request
+                HttpResponse httpResponse = getNewHttpResponse();
+                httpResponse.setStatus(STATUS_400);
+                streamResponse(new ServerResponse(httpResponse), output);
+                logger.error("Invalid request: {}", e.getMessage());
+                return;
+            }
             logger.debug("Processing request for: {}", httpRequest.getUri());
 
             ServerResponse serverResponse = getServerResponse(httpRequest);
-
             streamResponse(serverResponse, output);
         } catch (IOException e) {
             logger.error("Error while processing request: {}", e.toString());
-        } catch (InvalidRequestException e) {
-            //TODO: Respond with BAD REQUEST
-            logger.error("Invalid request: {}", e.getMessage());
         }
     }
 

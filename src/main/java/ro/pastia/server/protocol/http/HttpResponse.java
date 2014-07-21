@@ -50,8 +50,11 @@ public class HttpResponse extends HttpMessage {
     public String getHeaders() {
         //Headers with default values:
         putHeaderIfNotExists("Content-Type", "text/html; charset=iso-8859-1");
-        putHeaderIfNotExists("Vary", "Accept-Encoding");
         putHeaderIfNotExists("Content-Length", Integer.toString(getBody().getBytes().length));
+        if(getStatus() == Status.STATUS_200) {
+            //add Vary header for responses with status 200 OK
+            putHeaderIfNotExists("Vary", "Accept-Encoding");
+        }
 
         //Headers that are populated automatically:
         headers.put("Date", DateTimeHelper.getHttpServerTime());
