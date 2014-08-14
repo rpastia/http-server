@@ -37,7 +37,7 @@ You should run Http-Server by using the `target/http-server-${VERSION}-jar-with-
 The JAR file contains a main class manifest so you can run it like this:
 
 ```
-java jar target/http-server-${VERSION}-jar-with-dependencies.jar server.properties
+java -jar target/http-server-${VERSION}-jar-with-dependencies.jar server.properties
 ```
 
 The command line takes one argument, the path for the `server.properties` file. If this is not specified
